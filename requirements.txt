@@ -1,0 +1,12 @@
+comet_ml 
+ipython
+mitdeeplearning
+timidity
+tensorflow
+matplotlib
+scipy
+
+#source env/bin/activate   
+#python -m pip install ipykernel
+#brew install abcmidi
+#pip3 install comet_ml
