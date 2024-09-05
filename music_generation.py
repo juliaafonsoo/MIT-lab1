@@ -11,7 +11,6 @@
 
 #setup 
 import comet_ml
-COMET_API_KEY = "NAYItnCcXRFTkkSkCfrGwH8jb"
 import mitdeeplearning as mdl
 import mitdeeplearning.util
 import mitdeeplearning.lab1
@@ -49,8 +48,8 @@ chars = sorted(list(set(songs_joined)))
 print(''.join(chars))
 
 # create a mapping from characters to integers
-char2idx = { ch:i for i,ch in enumerate(chars) }
-idx2char = { i:ch for i,ch in enumerate(chars) }
+char2idx = { ch:i for i,ch in enumerate(vocab) }
+idx2char = np.array(vocab)
 
 # print('{')
 # for char,_ in zip(char2idx, range(20)):
@@ -58,8 +57,6 @@ idx2char = { i:ch for i,ch in enumerate(chars) }
 # print('  ...\n}')
 
 def vectorize_string(string):
-    chars = sorted(set(string))
-    char2idx = {ch: i for i, ch in enumerate(chars)}
     vectorized = np.array([char2idx[ch] for ch in string])
     return vectorized
 
@@ -99,10 +96,7 @@ for i, (input_idx, target_idx) in enumerate(zip(np.squeeze(x_batch), np.squeeze(
     print("Step {:3d}".format(i))
     print("  input: {} ({:s})".format(input_idx, repr(idx2char[input_idx])))
     print("  expected output: {} ({:s})".format(target_idx, repr(idx2char[target_idx])))
-
-
 #RNN MODEL
-
 def LSTM(rnn_units):
   return tf.keras.layers.LSTM(
     rnn_units,
@@ -111,8 +105,7 @@ def LSTM(rnn_units):
     recurrent_activation='sigmoid',
     stateful=True,
   )
-
-def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
+def build_model(vocab_size, embedding_dim, rnn_units):
   model = tf.keras.Sequential([
     tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform', input_length=None),
     LSTM(rnn_units),
@@ -121,13 +114,160 @@ def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
 
   return model
 
-model = build_model(len(vocab), embedding_dim=256, rnn_units=1024, batch_size=32)
+model = build_model(len(vocab), embedding_dim=256, rnn_units=1024)
 
-# testing the RNN
+#checking the model
 model.summary()
 x, y = get_batch(vectorized_songs, seq_length=100, batch_size=32)
 pred = model(x)
 print("Input shape:      ", x.shape, " # (batch_size, sequence_length)")
 print("Prediction shape: ", pred.shape, "# (batch_size, sequence_length, vocab_size)")
 
+sampled_indices = tf.random.categorical(pred[0], num_samples=1)
+sampled_indices = tf.squeeze(sampled_indices,axis=-1).numpy()
 
+print("Input: \n", repr("".join(idx2char[x[0]])))
+print()
+print("Next Char Predictions: \n", repr("".join(idx2char[sampled_indices])))
+
+
+#Training the model: loss and training operations
+
+#loss function
+def compute_loss(labels, logits):
+  loss = tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
+  return loss
+
+example_batch_loss = compute_loss(y, pred)
+
+print("Prediction shape: ", pred.shape, " # (batch_size, sequence_length, vocab_size)")
+print("scalar_loss:      ", example_batch_loss.numpy().mean())
+
+  
+#Hyperparameter setting and optimization
+vocab_size = len(vocab)
+params = dict(
+  num_training_iterations = 1000,  # Increase this to train longer
+  batch_size = 8,  # Experiment between 1 and 64
+  seq_length = 100,  # Experiment between 50 and 500
+  learning_rate = 5e-3,  # Experiment between 1e-5 and 1e-1
+  embedding_dim = 256,
+  rnn_units = 1024,  # Experiment between 1 and 2048
+)
+
+# Checkpoint location:
+checkpoint_dir = '/Users/juliaafonso/Documents/MITlab1/training_checks.weights.h5'
+checkpoint_prefix = os.path.join(checkpoint_dir, "my_ckpt.weights.h5")
+
+#Comet experiment to track training
+def create_experiment():
+  if 'experiment' in locals():
+    experiment.end()
+
+  experiment = comet_ml.Experiment(
+                  api_key="NAYItnCcXRFTkkSkCfrGwH8jb",
+                  project_name="MIT_Lab1_Part2")
+  
+  for param, value in params.items():
+    experiment.log_parameter(param, value)
+  experiment.flush()
+
+  return experiment
+
+  
+#Define optimizer and training operation
+model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"])
+optimizer = tf.keras.optimizers.Adam(params["learning_rate"])
+
+
+#backprop operations
+@tf.function
+def train_step(x, y):
+  with tf.GradientTape() as tape:
+    y_hat = model(x)
+    loss = compute_loss(y, y_hat)
+  
+  grads = tape.gradient(loss, model.trainable_variables) # gradiant
+
+  optimizer.apply_gradients(zip(grads, model.trainable_variables)) # Applying the gradients to the optimizer
+  return loss
+
+
+#training 
+
+history = []
+plotter = mdl.util.PeriodicPlotter(sec=2, xlabel='Iterations', ylabel='Loss')
+experiment = create_experiment()
+
+if hasattr(tqdm, '_instances'): tqdm._instances.clear() # clear if it exists
+for iter in tqdm(range(params["num_training_iterations"])):
+
+  x_batch, y_batch = get_batch(vectorized_songs, params["seq_length"], params["batch_size"])
+  loss = train_step(x_batch, y_batch)
+
+  experiment.log_metric("loss", loss.numpy().mean(), step=iter)
+  history.append(loss.numpy().mean())
+  plotter.plot(history)
+
+  if iter % 100 == 0:
+     model.save_weights(checkpoint_prefix)
+
+# Saving the trained model and the weights
+model.save_weights(checkpoint_prefix)
+experiment.flush()
+
+
+# Restoring latest checkpoint
+model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"])
+# Restoring weights for the last checkpoint after training
+model.load_weights(tf.train.latest_checkpoint(checkpoint_dir))
+model.build(tf.TensorShape([1, None]))
+
+model.summary()
+
+
+#Prediction of a generated song
+def generate_text(model, start_string, generation_length=1000):
+
+  input_eval = [char2idx[s] for s in start_string] # TODO
+  input_eval = tf.expand_dims(input_eval, 0)
+
+  # Empty string to store our results
+  text_generated = []
+
+  model.reset_states()
+  tqdm._instances.clear()
+
+  for i in tqdm(range(generation_length)):
+      predictions = model(input_eval)
+      # Removing the batch dimension
+      predictions = tf.squeeze(predictions, 0)
+
+      predicted_id = tf.random.categorical(predictions, num_samples=1)[-1,0].numpy()
+
+      input_eval = tf.expand_dims([predicted_id], 0)
+
+      text_generated.append(idx2char[predicted_id])
+
+  return (start_string + ''.join(text_generated))
+
+generated_text = generate_text(model, start_string="X", generation_length=1000)
+
+#Play back generated songs
+
+generated_songs = mdl.lab1.extract_song_snippet(generated_text)
+
+for i, song in enumerate(generated_songs):
+  waveform = mdl.lab1.play_song(song)
+
+  if waveform:
+    print("Generated song", i)
+    ipythondisplay.display(waveform)
+
+    numeric_data = np.frombuffer(waveform.data, dtype=np.int16)
+    wav_file_path = f"output_{i}.wav"
+    write(wav_file_path, 88200, numeric_data)
+
+    experiment.log_asset(wav_file_path)
+
+experiment.end()
