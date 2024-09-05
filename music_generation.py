@@ -99,3 +99,35 @@ for i, (input_idx, target_idx) in enumerate(zip(np.squeeze(x_batch), np.squeeze(
     print("Step {:3d}".format(i))
     print("  input: {} ({:s})".format(input_idx, repr(idx2char[input_idx])))
     print("  expected output: {} ({:s})".format(target_idx, repr(idx2char[target_idx])))
+
+
+#RNN MODEL
+
+def LSTM(rnn_units):
+  return tf.keras.layers.LSTM(
+    rnn_units,
+    return_sequences=True,
+    recurrent_initializer='glorot_uniform',
+    recurrent_activation='sigmoid',
+    stateful=True,
+  )
+
+def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
+  model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform', input_length=None),
+    LSTM(rnn_units),
+    tf.keras.layers.Dense(vocab_size)
+  ])
+
+  return model
+
+model = build_model(len(vocab), embedding_dim=256, rnn_units=1024, batch_size=32)
+
+# testing the RNN
+model.summary()
+x, y = get_batch(vectorized_songs, seq_length=100, batch_size=32)
+pred = model(x)
+print("Input shape:      ", x.shape, " # (batch_size, sequence_length)")
+print("Prediction shape: ", pred.shape, "# (batch_size, sequence_length, vocab_size)")
+
+
