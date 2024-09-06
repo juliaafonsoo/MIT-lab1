@@ -19,6 +19,7 @@ import os
 import time
 import functools
 import tensorflow as tf
+import h5py
 from tqdm import tqdm
 from scipy.io.wavfile import write
 import regex as re
@@ -96,20 +97,21 @@ for i, (input_idx, target_idx) in enumerate(zip(np.squeeze(x_batch), np.squeeze(
     print("Step {:3d}".format(i))
     print("  input: {} ({:s})".format(input_idx, repr(idx2char[input_idx])))
     print("  expected output: {} ({:s})".format(target_idx, repr(idx2char[target_idx])))
+
+
 #RNN MODEL
-def LSTM(rnn_units):
+def LSTM(rnn_units, batch_size=None):
   return tf.keras.layers.LSTM(
     rnn_units,
     return_sequences=True,
     recurrent_initializer='glorot_uniform',
     recurrent_activation='sigmoid',
-    stateful=True,
   )
-def build_model(vocab_size, embedding_dim, rnn_units):
+def build_model(vocab_size, embedding_dim, rnn_units, batch_size=None):
   model = tf.keras.Sequential([
-    tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform', input_length=None),
+    tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform', input_shape=(None,)),
     LSTM(rnn_units),
-    tf.keras.layers.Dense(vocab_size)
+    tf.keras.layers.Dense(vocab_size, activation='softmax')
   ])
 
   return model
@@ -147,17 +149,17 @@ print("scalar_loss:      ", example_batch_loss.numpy().mean())
 #Hyperparameter setting and optimization
 vocab_size = len(vocab)
 params = dict(
-  num_training_iterations = 1000,  # Increase this to train longer
+  num_training_iterations = 10,  # Increase this to train longer
   batch_size = 8,  # Experiment between 1 and 64
   seq_length = 100,  # Experiment between 50 and 500
-  learning_rate = 5e-3,  # Experiment between 1e-5 and 1e-1
+  learning_rate = 1e-4,  # Experiment between 1e-5 and 1e-1
   embedding_dim = 256,
   rnn_units = 1024,  # Experiment between 1 and 2048
 )
 
 # Checkpoint location:
-checkpoint_dir = '/Users/juliaafonso/Documents/MITlab1/training_checks.weights.h5'
-checkpoint_prefix = os.path.join(checkpoint_dir, "my_ckpt.weights.h5")
+checkpoint_dir = '/Users/juliaafonso/Documents/MITlab1/training_checks.h5'
+checkpoint_prefix = os.path.join(checkpoint_dir, "my_ckpt.h5")
 
 #Comet experiment to track training
 def create_experiment():
@@ -197,7 +199,7 @@ def train_step(x, y):
 
 history = []
 plotter = mdl.util.PeriodicPlotter(sec=2, xlabel='Iterations', ylabel='Loss')
-experiment = create_experiment()
+# experiment = create_experiment()
 
 if hasattr(tqdm, '_instances'): tqdm._instances.clear() # clear if it exists
 for iter in tqdm(range(params["num_training_iterations"])):
@@ -205,22 +207,21 @@ for iter in tqdm(range(params["num_training_iterations"])):
   x_batch, y_batch = get_batch(vectorized_songs, params["seq_length"], params["batch_size"])
   loss = train_step(x_batch, y_batch)
 
-  experiment.log_metric("loss", loss.numpy().mean(), step=iter)
+  # experiment.log_metric("loss", loss.numpy().mean(), step=iter)
   history.append(loss.numpy().mean())
   plotter.plot(history)
 
   if iter % 100 == 0:
-     model.save_weights(checkpoint_prefix)
+     model.save_weights('my_model.weights.h5')
 
 # Saving the trained model and the weights
-model.save_weights(checkpoint_prefix)
-experiment.flush()
-
+model.save_weights('my_model.weights.h5')
+# experiment.flush()
 
 # Restoring latest checkpoint
 model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"])
 # Restoring weights for the last checkpoint after training
-model.load_weights(tf.train.latest_checkpoint(checkpoint_dir))
+model.load_weights('/Users/juliaafonso/Documents/MITlab1')
 model.build(tf.TensorShape([1, None]))
 
 model.summary()
@@ -268,6 +269,6 @@ for i, song in enumerate(generated_songs):
     wav_file_path = f"output_{i}.wav"
     write(wav_file_path, 88200, numeric_data)
 
-    experiment.log_asset(wav_file_path)
+#     experiment.log_asset(wav_file_path)
 
-experiment.end()
+# experiment.end()
