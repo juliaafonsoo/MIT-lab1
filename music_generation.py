@@ -19,6 +19,11 @@ import os
 import time
 import functools
 import tensorflow as tf
+import keras
+from keras import ops
+from keras import models
+from keras import layers
+from keras import ops
 import h5py
 from tqdm import tqdm
 from scipy.io.wavfile import write
@@ -100,23 +105,26 @@ for i, (input_idx, target_idx) in enumerate(zip(np.squeeze(x_batch), np.squeeze(
 
 
 #RNN MODEL
-def LSTM(rnn_units, batch_size=None):
+def LSTM(rnn_units):
   return tf.keras.layers.LSTM(
     rnn_units,
     return_sequences=True,
     recurrent_initializer='glorot_uniform',
     recurrent_activation='sigmoid',
+     stateful=True
   )
-def build_model(vocab_size, embedding_dim, rnn_units, batch_size=None):
+
+def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
   model = tf.keras.Sequential([
-    tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform', input_shape=(None,)),
+    tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform'),
     LSTM(rnn_units),
     tf.keras.layers.Dense(vocab_size, activation='softmax')
   ])
+  model.build([batch_size, None])
 
   return model
 
-model = build_model(len(vocab), embedding_dim=256, rnn_units=1024)
+model = build_model(len(vocab), embedding_dim=256, rnn_units=1024,batch_size=32)
 
 #checking the model
 model.summary()
@@ -131,6 +139,8 @@ sampled_indices = tf.squeeze(sampled_indices,axis=-1).numpy()
 print("Input: \n", repr("".join(idx2char[x[0]])))
 print()
 print("Next Char Predictions: \n", repr("".join(idx2char[sampled_indices])))
+
+import tempfile
 
 
 #Training the model: loss and training operations
@@ -149,17 +159,17 @@ print("scalar_loss:      ", example_batch_loss.numpy().mean())
 #Hyperparameter setting and optimization
 vocab_size = len(vocab)
 params = dict(
-  num_training_iterations = 10,  # Increase this to train longer
+  num_training_iterations = 1000,  # Increase this to train longer
   batch_size = 8,  # Experiment between 1 and 64
   seq_length = 100,  # Experiment between 50 and 500
-  learning_rate = 1e-4,  # Experiment between 1e-5 and 1e-1
+  learning_rate = 5e-3,  # Experiment between 1e-5 and 1e-1
   embedding_dim = 256,
   rnn_units = 1024,  # Experiment between 1 and 2048
 )
 
 # Checkpoint location:
-checkpoint_dir = '/Users/juliaafonso/Documents/MITlab1/training_checks.h5'
-checkpoint_prefix = os.path.join(checkpoint_dir, "my_ckpt.h5")
+checkpoint_dir = '/Users/juliaafonso/Documents/MITlab1'
+checkpoint_prefix = os.path.join(checkpoint_dir, "my_model.keras")
 
 #Comet experiment to track training
 def create_experiment():
@@ -178,7 +188,7 @@ def create_experiment():
 
   
 #Define optimizer and training operation
-model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"])
+model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], params["batch_size"])
 optimizer = tf.keras.optimizers.Adam(params["learning_rate"])
 
 
@@ -199,7 +209,7 @@ def train_step(x, y):
 
 history = []
 plotter = mdl.util.PeriodicPlotter(sec=2, xlabel='Iterations', ylabel='Loss')
-# experiment = create_experiment()
+experiment = create_experiment()
 
 if hasattr(tqdm, '_instances'): tqdm._instances.clear() # clear if it exists
 for iter in tqdm(range(params["num_training_iterations"])):
@@ -207,28 +217,29 @@ for iter in tqdm(range(params["num_training_iterations"])):
   x_batch, y_batch = get_batch(vectorized_songs, params["seq_length"], params["batch_size"])
   loss = train_step(x_batch, y_batch)
 
-  # experiment.log_metric("loss", loss.numpy().mean(), step=iter)
+  experiment.log_metric("loss", loss.numpy().mean(), step=iter)
   history.append(loss.numpy().mean())
   plotter.plot(history)
 
   if iter % 100 == 0:
-     model.save_weights('my_model.weights.h5')
+     tf.keras.models.save_model(model,'/Users/juliaafonso/Documents/MITlab1/model.keras',overwrite=True)
 
 # Saving the trained model and the weights
-model.save_weights('my_model.weights.h5')
-# experiment.flush()
+tf.keras.models.save_model(model,'/Users/juliaafonso/Documents/MITlab1/model.keras',overwrite=True)
+experiment.flush()
 
 # Restoring latest checkpoint
-model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"])
+model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], 1)
 # Restoring weights for the last checkpoint after training
-model.load_weights('/Users/juliaafonso/Documents/MITlab1')
+model.load_weights('/Users/juliaafonso/Documents/MITlab1/model.keras',skip_mismatch=False)
+model.summary()
 model.build(tf.TensorShape([1, None]))
 
 model.summary()
 
 
 #Prediction of a generated song
-def generate_text(model, start_string, generation_length=1000):
+def generate_text(model, start_string, generation_length):
 
   input_eval = [char2idx[s] for s in start_string] # TODO
   input_eval = tf.expand_dims(input_eval, 0)
@@ -236,8 +247,9 @@ def generate_text(model, start_string, generation_length=1000):
   # Empty string to store our results
   text_generated = []
 
-  model.reset_states()
   tqdm._instances.clear()
+  lstm_layer = model.layers[1]  # Suponha que a primeira camada seja um LSTM
+  lstm_layer.reset_states()
 
   for i in tqdm(range(generation_length)):
       predictions = model(input_eval)
@@ -269,6 +281,6 @@ for i, song in enumerate(generated_songs):
     wav_file_path = f"output_{i}.wav"
     write(wav_file_path, 88200, numeric_data)
 
-#     experiment.log_asset(wav_file_path)
+    experiment.log_asset(wav_file_path)
 
-# experiment.end()
+experiment.end()
