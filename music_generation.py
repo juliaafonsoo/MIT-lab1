@@ -159,7 +159,7 @@ print("scalar_loss:      ", example_batch_loss.numpy().mean())
 #Hyperparameter setting and optimization
 vocab_size = len(vocab)
 params = dict(
-  num_training_iterations = 1000,  # Increase this to train longer
+  num_training_iterations = 3000,  # Increase this to train longer
   batch_size = 8,  # Experiment between 1 and 64
   seq_length = 100,  # Experiment between 50 and 500
   learning_rate = 5e-3,  # Experiment between 1e-5 and 1e-1
@@ -222,16 +222,19 @@ for iter in tqdm(range(params["num_training_iterations"])):
   plotter.plot(history)
 
   if iter % 100 == 0:
-     tf.keras.models.save_model(model,'/Users/juliaafonso/Documents/MITlab1/model.keras',overwrite=True)
+     tf.keras.models.save_model(model,'/Users/juliaafonso/Documents/MITlab1/model.keras')
+     model.save_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5')
 
 # Saving the trained model and the weights
 tf.keras.models.save_model(model,'/Users/juliaafonso/Documents/MITlab1/model.keras',overwrite=True)
+model.save_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5', overwrite=True)
+experiment.log_asset('model.weights.h5')
 experiment.flush()
 
 # Restoring latest checkpoint
-model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], 1)
+model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], batch_size=1)
 # Restoring weights for the last checkpoint after training
-model.load_weights('/Users/juliaafonso/Documents/MITlab1/model.keras',skip_mismatch=False)
+model.load_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5')
 model.summary()
 model.build(tf.TensorShape([1, None]))
 
@@ -241,14 +244,14 @@ model.summary()
 #Prediction of a generated song
 def generate_text(model, start_string, generation_length):
 
-  input_eval = [char2idx[s] for s in start_string] # TODO
+  input_eval = [char2idx[s] for s in start_string]
   input_eval = tf.expand_dims(input_eval, 0)
 
   # Empty string to store our results
   text_generated = []
 
   tqdm._instances.clear()
-  lstm_layer = model.layers[1]  # Suponha que a primeira camada seja um LSTM
+  lstm_layer = model.layers[1] 
   lstm_layer.reset_states()
 
   for i in tqdm(range(generation_length)):
@@ -265,6 +268,7 @@ def generate_text(model, start_string, generation_length):
   return (start_string + ''.join(text_generated))
 
 generated_text = generate_text(model, start_string="X", generation_length=1000)
+print(generated_text)
 
 #Play back generated songs
 
