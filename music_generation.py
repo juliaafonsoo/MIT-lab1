@@ -36,18 +36,11 @@ from IPython.display import Audio
 # Download the dataset
 songs = mdl.lab1.load_training_data()
 
-# Print one of the songs to inspect it in greater detail!
-example_song = songs[0]
-# print("\nExample song: ")
-# print(example_song)
-
-# Convert the ABC notation to audio file and listen to it
-mdl.lab1.play_song(example_song)
-
-# # Join our list of song strings into a single string containing all songs
+#Join our list of song strings into a single string containing all songs
 songs_joined = "\n\n".join(songs)
+print(songs_joined)
 
-# # Find all unique characters in the joined string
+#Find all unique characters in the joined string
 vocab = sorted(set(songs_joined))
 print("There are", len(vocab), "unique characters in the dataset")
 chars = sorted(list(set(songs_joined)))
@@ -57,10 +50,6 @@ print(''.join(chars))
 char2idx = { ch:i for i,ch in enumerate(vocab) }
 idx2char = np.array(vocab)
 
-# print('{')
-# for char,_ in zip(char2idx, range(20)):
-#     print('  {:4s}: {:3d},'.format(repr(char), char2idx[char]))
-# print('  ...\n}')
 
 def vectorize_string(string):
     vectorized = np.array([char2idx[ch] for ch in string])
@@ -78,9 +67,7 @@ def get_batch(vectorized_songs, seq_length, batch_size):
   # randomly choose the starting indices for the examples in the training batch
   idx = np.random.choice(n-seq_length, batch_size)
 
-  '''TODO: construct a list of input sequences for the training batch'''
   input_batch = np.array([vectorized_songs[i:i+seq_length] for i in idx])
-  '''TODO: construct a list of output sequences for the training batch'''
   output_batch = np.array([vectorized_songs[i+1:i+1+seq_length] for i in idx])
 
   # x_batch, y_batch provide the true inputs and targets for network training
@@ -88,13 +75,6 @@ def get_batch(vectorized_songs, seq_length, batch_size):
   y_batch = np.reshape(output_batch, [batch_size, seq_length])
   return x_batch, y_batch
 
-# test_args = (vectorized_songs, 10, 2)
-# if not mdl.lab1.test_batch_func_types(get_batch, test_args) or \
-#    not mdl.lab1.test_batch_func_shapes(get_batch, test_args) or \
-#    not mdl.lab1.test_batch_func_next_step(get_batch, test_args):
-#    print("======\n[FAIL] could not pass tests")
-# else:
-#    print("======\n[PASS] passed all tests!")
 
 x_batch, y_batch = get_batch(vectorized_songs, seq_length=5, batch_size=1)
 
@@ -124,7 +104,7 @@ def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
 
   return model
 
-model = build_model(len(vocab), embedding_dim=256, rnn_units=1024,batch_size=32)
+model = build_model(len(vocab), embedding_dim=256, rnn_units=2048,batch_size=32)
 
 #checking the model
 model.summary()
@@ -164,12 +144,8 @@ params = dict(
   seq_length = 100,  # Experiment between 50 and 500
   learning_rate = 5e-3,  # Experiment between 1e-5 and 1e-1
   embedding_dim = 256,
-  rnn_units = 1024,  # Experiment between 1 and 2048
+  rnn_units = 2048,  # Experiment between 1 and 2048
 )
-
-# Checkpoint location:
-checkpoint_dir = '/Users/juliaafonso/Documents/MITlab1'
-checkpoint_prefix = os.path.join(checkpoint_dir, "my_model.keras")
 
 #Comet experiment to track training
 def create_experiment():
@@ -222,11 +198,9 @@ for iter in tqdm(range(params["num_training_iterations"])):
   plotter.plot(history)
 
   if iter % 100 == 0:
-     tf.keras.models.save_model(model,'/Users/juliaafonso/Documents/MITlab1/model.keras')
      model.save_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5')
 
 # Saving the trained model and the weights
-tf.keras.models.save_model(model,'/Users/juliaafonso/Documents/MITlab1/model.keras',overwrite=True)
 model.save_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5', overwrite=True)
 experiment.log_asset('model.weights.h5')
 experiment.flush()
@@ -235,9 +209,7 @@ experiment.flush()
 model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], batch_size=1)
 # Restoring weights for the last checkpoint after training
 model.load_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5')
-model.summary()
 model.build(tf.TensorShape([1, None]))
-
 model.summary()
 
 
@@ -267,11 +239,7 @@ def generate_text(model, start_string, generation_length):
 
   return (start_string + ''.join(text_generated))
 
-generated_text = generate_text(model, start_string="X", generation_length=1000)
-print(generated_text)
-
-#Play back generated songs
-
+generated_text = generate_text(model, start_string="X:", generation_length=10000)
 generated_songs = mdl.lab1.extract_song_snippet(generated_text)
 
 for i, song in enumerate(generated_songs):

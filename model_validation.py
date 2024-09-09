@@ -1,4 +1,4 @@
-import music_generation 
+import comet_ml
 from music_generation import build_model
 from music_generation import params
 from music_generation import vocab_size
@@ -13,14 +13,12 @@ import numpy as np
 from scipy.io.wavfile import write
 
 # Restoring latest checkpoint
-model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], batch_size=1)
+model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], 1)
 # Restoring weights for the last checkpoint after training
 # download_experiment_asset(
-#     experiment_key: str, asset_id: str, output_path: str
+#     experiment_key: 'ceb0eca07e8f49a0add953c0f52590f8', asset_id: str, output_path: str
 # ) -> None
-model.load_model('/Users/juliaafonso/Documents/MITlab1/model.keras')
-model.save_weights('model_weights.h5')
-model.load_weights('model_weights.h5')
+model.load_weights('/Users/juliaafonso/Documents/MITlab1/swift_baluster_8593_model.weights.h5')
 model.summary()
 model.build(tf.TensorShape([1, None]))
 
