@@ -34,7 +34,7 @@ def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
   return model
 
 model = build_model(len(vocab), 256, 1024, 1)
-model.load_weights('/Users/juliaafonso/Documents/MITlab1/severe_dragster_model.weights.h5')
+model.load_weights('/Users/juliaafonso/Documents/MITlab1/keen_desert_model.weights.h5')
 model.build(tf.TensorShape([1, None]))
 model.summary()
 
@@ -48,8 +48,6 @@ def generate_text(model, start_string, generation_length):
   text_generated = []
 
   tqdm._instances.clear()
-  lstm_layer = model.layers[1] 
-  lstm_layer.reset_states()
 
   for i in tqdm(range(generation_length)):
       predictions = model(input_eval)

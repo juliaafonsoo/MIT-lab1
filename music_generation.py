@@ -98,29 +98,27 @@ def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
   model = tf.keras.Sequential([
     tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform'),
     LSTM(rnn_units),
-    tf.keras.layers.Dense(vocab_size, activation='softmax')
+    tf.keras.layers.Dense(vocab_size)
   ])
   model.build([batch_size, None])
 
   return model
 
-model = build_model(len(vocab), embedding_dim=256, rnn_units=2048,batch_size=32)
+# model = build_model(len(vocab), embedding_dim=256, rnn_units=2048,batch_size=32)
 
-#checking the model
-model.summary()
-x, y = get_batch(vectorized_songs, seq_length=100, batch_size=32)
-pred = model(x)
-print("Input shape:      ", x.shape, " # (batch_size, sequence_length)")
-print("Prediction shape: ", pred.shape, "# (batch_size, sequence_length, vocab_size)")
+# #checking the model
+# model.summary()
+# x, y = get_batch(vectorized_songs, seq_length=100, batch_size=32)
+# pred = model(x)
+# print("Input shape:      ", x.shape, " # (batch_size, sequence_length)")
+# print("Prediction shape: ", pred.shape, "# (batch_size, sequence_length, vocab_size)")
 
-sampled_indices = tf.random.categorical(pred[0], num_samples=1)
-sampled_indices = tf.squeeze(sampled_indices,axis=-1).numpy()
+# sampled_indices = tf.random.categorical(pred[0], num_samples=1)
+# sampled_indices = tf.squeeze(sampled_indices,axis=-1).numpy()
 
-print("Input: \n", repr("".join(idx2char[x[0]])))
-print()
-print("Next Char Predictions: \n", repr("".join(idx2char[sampled_indices])))
-
-import tempfile
+# print("Input: \n", repr("".join(idx2char[x[0]])))
+# print()
+# print("Next Char Predictions: \n", repr("".join(idx2char[sampled_indices])))
 
 
 #Training the model: loss and training operations
@@ -130,10 +128,10 @@ def compute_loss(labels, logits):
   loss = tf.keras.losses.sparse_categorical_crossentropy(labels, logits, from_logits=True)
   return loss
 
-example_batch_loss = compute_loss(y, pred)
+# example_batch_loss = compute_loss(y, pred)
 
-print("Prediction shape: ", pred.shape, " # (batch_size, sequence_length, vocab_size)")
-print("scalar_loss:      ", example_batch_loss.numpy().mean())
+# print("Prediction shape: ", pred.shape, " # (batch_size, sequence_length, vocab_size)")
+# print("scalar_loss:      ", example_batch_loss.numpy().mean())
 
   
 #Hyperparameter setting and optimization
@@ -144,7 +142,7 @@ params = dict(
   seq_length = 100,  # Experiment between 50 and 500
   learning_rate = 5e-3,  # Experiment between 1e-5 and 1e-1
   embedding_dim = 256,
-  rnn_units = 2048,  # Experiment between 1 and 2048
+  rnn_units = 1024,  # Experiment between 1 and 2048
 )
 
 #Comet experiment to track training
@@ -197,8 +195,6 @@ for iter in tqdm(range(params["num_training_iterations"])):
   history.append(loss.numpy().mean())
   plotter.plot(history)
 
-  if iter % 100 == 0:
-     model.save_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5')
 
 # Saving the trained model and the weights
 model.save_weights('/Users/juliaafonso/Documents/MITlab1/model.weights.h5', overwrite=True)
@@ -239,7 +235,7 @@ def generate_text(model, start_string, generation_length):
 
   return (start_string + ''.join(text_generated))
 
-generated_text = generate_text(model, start_string="X:", generation_length=10000)
+generated_text = generate_text(model, start_string="X:", generation_length=1000)
 generated_songs = mdl.lab1.extract_song_snippet(generated_text)
 
 for i, song in enumerate(generated_songs):
