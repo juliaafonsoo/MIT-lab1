@@ -1,9 +1,4 @@
 import comet_ml
-from music_generation import build_model
-from music_generation import params
-from music_generation import vocab_size
-from music_generation import char2idx
-from music_generation import idx2char
 import tensorflow as tf
 from tqdm import tqdm
 import mitdeeplearning as mdl
@@ -12,18 +7,36 @@ from IPython.display import Audio
 import numpy as np
 from scipy.io.wavfile import write
 
-# Restoring latest checkpoint
-model = build_model(vocab_size, params["embedding_dim"], params["rnn_units"], 1)
-# Restoring weights for the last checkpoint after training
-# download_experiment_asset(
-#     experiment_key: 'ceb0eca07e8f49a0add953c0f52590f8', asset_id: str, output_path: str
-# ) -> None
-model.load_weights('/Users/juliaafonso/Documents/MITlab1/swift_baluster_8593_model.weights.h5')
-model.summary()
+
+songs = mdl.lab1.load_training_data()
+songs_joined = "\n\n".join(songs)
+vocab = sorted(set(songs_joined))
+
+char2idx = { ch:i for i,ch in enumerate(vocab) }
+idx2char = np.array(vocab)
+
+def LSTM(rnn_units):
+  return tf.keras.layers.LSTM(
+    rnn_units,
+    return_sequences=True,
+    recurrent_initializer='glorot_uniform',
+    recurrent_activation='sigmoid',
+     stateful=True
+  )
+def build_model(vocab_size, embedding_dim, rnn_units, batch_size):
+  model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(vocab_size, embedding_dim, embeddings_initializer='uniform'),
+    LSTM(rnn_units),
+    tf.keras.layers.Dense(vocab_size, activation='softmax')
+  ])
+  model.build([batch_size, None])
+
+  return model
+
+model = build_model(len(vocab), 256, 1024, 1)
+model.load_weights('/Users/juliaafonso/Documents/MITlab1/keen_desert_model.weights.h5')
 model.build(tf.TensorShape([1, None]))
-
 model.summary()
-
 
 #Prediction of a generated song
 def generate_text(model, start_string, generation_length):
@@ -35,8 +48,6 @@ def generate_text(model, start_string, generation_length):
   text_generated = []
 
   tqdm._instances.clear()
-  lstm_layer = model.layers[1] 
-  lstm_layer.reset_states()
 
   for i in tqdm(range(generation_length)):
       predictions = model(input_eval)
@@ -51,13 +62,9 @@ def generate_text(model, start_string, generation_length):
 
   return (start_string + ''.join(text_generated))
 
-generated_text = generate_text(model, start_string="X", generation_length=1000)
-print(generated_text)
 
-#Play back generated songs
-
+generated_text = generate_text(model, start_string="X:", generation_length=10000)
 generated_songs = mdl.lab1.extract_song_snippet(generated_text)
-print(generated_songs)
 
 for i, song in enumerate(generated_songs):
   waveform = mdl.lab1.play_song(song)
@@ -65,8 +72,4 @@ for i, song in enumerate(generated_songs):
   if waveform:
     print("Generated song", i)
     ipythondisplay.display(waveform)
-
-    numeric_data = np.frombuffer(waveform.data, dtype=np.int16)
-    wav_file_path = f"output_{i}.wav"
-    write(wav_file_path, 88200, numeric_data)
 
